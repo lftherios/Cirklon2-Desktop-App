@@ -8,6 +8,9 @@ use cirklon_core::model::Library;
 use cirklon_core::validate::{self, Finding, FixOp};
 use cirklon_core::{abbrev, cki};
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::Manager;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 #[derive(Serialize)]
 struct LoadResult {
@@ -85,6 +88,67 @@ fn suggest_label(name: String) -> String {
     abbrev::suggest(&name)
 }
 
+/// True while the frontend holds edits that haven't been exported.
+#[derive(Default)]
+struct Unsaved(AtomicBool);
+
+#[tauri::command]
+fn set_dirty(dirty: bool, unsaved: tauri::State<Unsaved>) {
+    unsaved.0.store(dirty, Ordering::Relaxed);
+}
+
+/// The frontend holds the only copy of unexported edits, so closing asks first.
+fn guard_close(window: &tauri::Window, event: &tauri::WindowEvent) {
+    let tauri::WindowEvent::CloseRequested { api, .. } = event else { return };
+    if !window.state::<Unsaved>().0.load(Ordering::Relaxed) {
+        return;
+    }
+    api.prevent_close();
+    let closing = window.clone();
+    window
+        .dialog()
+        .message("Edits since the last export will be lost.")
+        .title("Close without exporting?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom("Discard edits".into(), "Keep editing".into()))
+        .parent(window)
+        .show(move |discard| {
+            if discard {
+                let _ = closing.destroy();
+            }
+        });
+}
+
+/// The stock macOS Quit item terminates the process without a close request,
+/// which would skip `guard_close` - swap it for one that closes the window.
+#[cfg(target_os = "macos")]
+mod guarded_quit {
+    use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind};
+    use tauri::{AppHandle, Manager, Wry};
+
+    const QUIT_ID: &str = "guarded-quit";
+
+    pub fn menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+        let menu = Menu::default(app)?;
+        if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
+            if let Some(MenuItemKind::Predefined(stock_quit)) = app_menu.items()?.last() {
+                app_menu.remove(stock_quit)?;
+                let label = format!("Quit {}", app.package_info().name);
+                app_menu.append(&MenuItem::with_id(app, QUIT_ID, label, true, Some("Cmd+Q"))?)?;
+            }
+        }
+        Ok(menu)
+    }
+
+    pub fn on_event(app: &AppHandle, event: MenuEvent) {
+        if event.id() == QUIT_ID {
+            for window in app.webview_windows().values() {
+                let _ = window.close();
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,8 +171,10 @@ mod tests {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(Unsaved::default())
+        .on_window_event(guard_close)
         .invoke_handler(tauri::generate_handler![
             load_library,
             save_library,
@@ -117,7 +183,11 @@ pub fn run() {
             merge_sidecar,
             parse_chart,
             suggest_label,
-        ])
+            set_dirty,
+        ]);
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(guarded_quit::menu).on_menu_event(guarded_quit::on_event);
+    builder
         .run(tauri::generate_context!())
         .expect("error while running application");
 }
