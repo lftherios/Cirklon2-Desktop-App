@@ -46,10 +46,23 @@ impl FixOp {
     }
 }
 
+/// Where a finding lives in the editor, so a UI can jump straight to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Area {
+    Setup,
+    Cc,
+    Tv,
+    Rows,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Finding {
     pub severity: Severity,
     pub instrument: String,
+    /// Position in the library - names can be empty or duplicated, indices can't.
+    pub index: usize,
+    pub area: Area,
     pub title: String,
     pub detail: String,
     pub fix_label: Option<String>,
@@ -64,7 +77,7 @@ pub fn validate(library: &Library) -> Vec<Finding> {
         check_routing(index, inst, &mut findings);
         check_track_values(index, inst, &mut findings);
         check_cc_defs(index, inst, &mut findings);
-        check_note_rows(inst, &mut findings);
+        check_note_rows(index, inst, &mut findings);
     }
     check_shared_routing(library, &mut findings);
     check_duplicate_names(library, &mut findings);
@@ -137,6 +150,8 @@ fn check_name(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
         findings.push(Finding {
             severity: Severity::Error,
             instrument: inst.name.clone(),
+            index,
+            area: Area::Setup,
             title: "Instrument has no name".into(),
             detail: "The Cirklon needs a name to list it. Give it one before exporting.".into(),
             fix_label: None,
@@ -149,6 +164,8 @@ fn check_name(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
         findings.push(Finding {
             severity: Severity::Error,
             instrument: inst.name.clone(),
+            index,
+            area: Area::Setup,
             title: format!("Name \u{201c}{}\u{201d} won't fit", inst.name),
             detail: format!("Instrument names are {MAX_NAME_LEN} characters on the hardware."),
             fix_label: Some(format!("Use \u{201c}{truncated}\u{201d}")),
@@ -163,6 +180,8 @@ fn check_routing(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
         findings.push(Finding {
             severity: Severity::Error,
             instrument: inst.name.clone(),
+            index,
+            area: Area::Setup,
             title: format!("MIDI channel {} doesn't exist", inst.midi_channel),
             detail: "Channels run 1\u{2013}16.".into(),
             fix_label: Some(format!("Set channel {clamped}")),
@@ -174,6 +193,8 @@ fn check_routing(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
         findings.push(Finding {
             severity: Severity::Warning,
             instrument: inst.name.clone(),
+            index,
+            area: Area::Setup,
             title: format!("Port {} is outside the editor's known range", inst.midi_port),
             detail: "MIDI 1\u{2013}5 and USB 1\u{2013}6 map to ports 1\u{2013}11. Higher numbers may be CV or USB-host ports - the editor can't verify them.".into(),
             fix_label: None,
@@ -189,6 +210,8 @@ fn check_routing(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
             findings.push(Finding {
                 severity: Severity::Error,
                 instrument: inst.name.clone(),
+                index,
+                area: Area::Setup,
                 title: "Poly spread runs past channel 16".into(),
                 detail: format!(
                     "{} voices up from channel {} would need channel {top}.",
@@ -215,6 +238,8 @@ fn check_track_values(index: usize, inst: &Instrument, findings: &mut Vec<Findin
             findings.push(Finding {
                 severity: Severity::Error,
                 instrument: inst.name.clone(),
+                index,
+                area: Area::Tv,
                 title: format!("CC {cc} doesn't exist (slot {slot})"),
                 detail: "CC numbers run 0\u{2013}127.".into(),
                 fix_label: Some("Clear this slot".into()),
@@ -227,6 +252,8 @@ fn check_track_values(index: usize, inst: &Instrument, findings: &mut Vec<Findin
             findings.push(Finding {
                 severity: Severity::Error,
                 instrument: inst.name.clone(),
+                index,
+                area: Area::Tv,
                 title: format!("CC {cc} is mapped twice"),
                 detail: format!(
                     "Slots {first_slot} and {slot} both claim it - the Cirklon will show two controls fighting over one parameter."
@@ -258,6 +285,8 @@ fn check_label(
         findings.push(Finding {
             severity: Severity::Warning,
             instrument: inst.name.clone(),
+            index,
+            area: Area::Tv,
             title: format!("\u{201c}{label}\u{201d} won't fit ({owner})"),
             detail: format!(
                 "Labels are {MAX_LABEL_LEN} characters on the hardware - this ships as \u{201c}{shipped}\u{201d}."
@@ -270,6 +299,8 @@ fn check_label(
         findings.push(Finding {
             severity: Severity::Warning,
             instrument: inst.name.clone(),
+            index,
+            area: Area::Tv,
             title: format!("\u{201c}{label}\u{201d} has characters the Cirklon can't show ({owner})"),
             detail: format!("The hardware character set is letters, digits and {LEGAL_LABEL_CHARS}"),
             fix_label: Some(format!("Use \u{201c}{cleaned}\u{201d}")),
@@ -288,6 +319,8 @@ fn check_cc_defs(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
             findings.push(Finding {
                 severity: Severity::Error,
                 instrument: inst.name.clone(),
+                index,
+                area: Area::Cc,
                 title: format!("CC {} range is inverted ({}\u{2013}{})", def.cc, def.min, def.max),
                 detail: "Minimum must not exceed maximum.".into(),
                 fix_label: Some("Swap min and max".into()),
@@ -298,6 +331,8 @@ fn check_cc_defs(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
             findings.push(Finding {
                 severity: Severity::Error,
                 instrument: inst.name.clone(),
+                index,
+                area: Area::Cc,
                 title: format!(
                     "Start value {} is outside range {}\u{2013}{} on CC {}",
                     def.start, def.min, def.max, def.cc
@@ -312,6 +347,8 @@ fn check_cc_defs(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
             findings.push(Finding {
                 severity: Severity::Warning,
                 instrument: inst.name.clone(),
+                index,
+                area: Area::Cc,
                 title: format!("CC {} has no label", def.cc),
                 detail: format!("It will show as \u{201c}cc# {}\u{201d} on the hardware.", def.cc),
                 fix_label: None,
@@ -321,12 +358,14 @@ fn check_cc_defs(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
     }
 }
 
-fn check_note_rows(inst: &Instrument, findings: &mut Vec<Finding>) {
+fn check_note_rows(index: usize, inst: &Instrument, findings: &mut Vec<Finding>) {
     for row in inst.note_rows.values() {
         if !(0..=MAX_NOTE_ID).contains(&row.note_id) {
             findings.push(Finding {
                 severity: Severity::Error,
                 instrument: inst.name.clone(),
+                index,
+                area: Area::Rows,
                 title: format!("Note row {} is outside C0\u{2013}G10", crate::note::note_name(row.note_id)),
                 detail: "The Cirklon's note range ends at G10 (\u{201c}G X\u{201d}). Remove or re-pitch this row.".into(),
                 fix_label: None,
@@ -337,19 +376,22 @@ fn check_note_rows(inst: &Instrument, findings: &mut Vec<Finding>) {
 }
 
 fn check_shared_routing(library: &Library, findings: &mut Vec<Finding>) {
-    let mut by_route: HashMap<(i32, i32), Vec<&str>> = HashMap::new();
-    for inst in &library.instruments {
+    let mut by_route: HashMap<(i32, i32), Vec<(usize, &str)>> = HashMap::new();
+    for (index, inst) in library.instruments.iter().enumerate() {
         by_route
             .entry((inst.midi_port, inst.midi_channel))
             .or_default()
-            .push(&inst.name);
+            .push((index, &inst.name));
     }
-    let mut routes: Vec<_> = by_route.into_iter().filter(|(_, names)| names.len() > 1).collect();
+    let mut routes: Vec<_> = by_route.into_iter().filter(|(_, sharers)| sharers.len() > 1).collect();
     routes.sort();
-    for ((port, channel), names) in routes {
+    for ((port, channel), sharers) in routes {
+        let names: Vec<&str> = sharers.iter().map(|(_, name)| *name).collect();
         findings.push(Finding {
             severity: Severity::Info,
             instrument: names[0].to_string(),
+            index: sharers[0].0,
+            area: Area::Setup,
             title: format!("Port {port} \u{b7} ch {channel} is shared"),
             detail: format!(
                 "\u{201c}{}\u{201d} all send here. Fine if intentional - consider Multi-timbral if it's one box.",
@@ -362,18 +404,20 @@ fn check_shared_routing(library: &Library, findings: &mut Vec<Finding>) {
 }
 
 fn check_duplicate_names(library: &Library, findings: &mut Vec<Finding>) {
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for inst in &library.instruments {
+    let mut holders: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (index, inst) in library.instruments.iter().enumerate() {
         if !inst.name.is_empty() {
-            *counts.entry(inst.name.as_str()).or_default() += 1;
+            holders.entry(inst.name.as_str()).or_default().push(index);
         }
     }
-    let mut dupes: Vec<_> = counts.into_iter().filter(|(_, n)| *n > 1).collect();
+    let mut dupes: Vec<_> = holders.into_iter().filter(|(_, at)| at.len() > 1).collect();
     dupes.sort();
-    for (name, _) in dupes {
+    for (name, at) in dupes {
         findings.push(Finding {
             severity: Severity::Error,
             instrument: name.to_string(),
+            index: at[1], // the later one is the one to rename
+            area: Area::Setup,
             title: format!("Two instruments are named \u{201c}{name}\u{201d}"),
             detail: "The Cirklon looks instruments up by name - the second one would replace the first on load.".into(),
             fix_label: None,

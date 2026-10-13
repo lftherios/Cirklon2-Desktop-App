@@ -78,6 +78,27 @@ fn findings_round_trip_through_json() {
     assert!(validate::validate(&lib).is_empty());
 }
 
+/// Findings tell the frontend where to jump: an instrument index plus one of
+/// app.js's tab ids ("setup" | "cc" | "tv" | "rows").
+#[test]
+fn findings_carry_a_jump_target() {
+    let mut drums = Instrument::new("Drums");
+    drums.cc_defs.insert(7, CcDef::new(7)); // unlabeled -> warning on the CC map
+    drums.track_values.insert(1, TrackValue::MidiCc { cc: 200, label: None }); // -> error on track values
+    let lib = Library { instruments: vec![Instrument::new("Bass"), drums, Instrument::new("Bass")] };
+
+    let json = serde_json::to_value(validate::validate(&lib)).unwrap();
+    let target = |needle: &str| {
+        let f = json.as_array().unwrap().iter()
+            .find(|f| f["title"].as_str().unwrap().contains(needle))
+            .unwrap_or_else(|| panic!("no finding titled {needle}"));
+        (f["index"].as_u64().unwrap(), f["area"].as_str().unwrap().to_string())
+    };
+    assert_eq!(target("has no label"), (1, "cc".into()));
+    assert_eq!(target("doesn't exist"), (1, "tv".into()));
+    assert_eq!(target("Two instruments are named"), (2, "setup".into()), "points at the later duplicate");
+}
+
 /// The merge_sidecar command's data path: two frontend-shaped sidecars in,
 /// incoming values fill gaps but never blank what the user already wrote.
 #[test]

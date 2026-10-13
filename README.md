@@ -7,7 +7,7 @@
 [![firmware](https://img.shields.io/badge/CirkOS-1.22-F0A63C)](https://www.sequentix.com/cirklon-downloads)
 [![format](https://img.shields.io/badge/.CKI-Cirklon%201%20%2B%202-1C1F24)](app/core/src/cki.rs)
 [![built with](https://img.shields.io/badge/Rust%20%2B%20Tauri-~2.5%20MB%20app-2E333A)](app/)
-[![tests](https://img.shields.io/badge/cirklon--core-25%20passing-2a7d4f)](app/core/tests/)
+[![tests](https://img.shields.io/badge/cirklon--core-27%20passing-2a7d4f)](app/core/tests/)
 
 </div>
 
