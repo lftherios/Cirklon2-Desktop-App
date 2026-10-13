@@ -11,36 +11,47 @@
     <span class="brand"><span class="led"></span>Cirklon2&nbsp;Desktop&nbsp;App</span>
     <span class="crumb" id="crumb">no file loaded</span>
     <span class="spacer"></span>
+    <button id="btnUndo" class="icon" aria-label="Undo" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+    </button>
+    <button id="btnRedo" class="icon" aria-label="Redo" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+    </button>
     <button id="btnImport">Import…</button>
-    <button id="btnPrepare" class="primary">Prepare for Cirklon</button>
+    <button id="btnPrepare" class="primary" disabled>Prepare for Cirklon</button>
   </div>
   <div class="body">
     <aside class="rail">
-      <input id="railSearch" placeholder="Search instruments…" spellcheck="false">
+      <input id="railSearch" placeholder="Search instruments…" spellcheck="false" aria-label="Search instruments">
       <div class="rail-list" id="railList"></div>
       <div class="rail-foot"><button id="btnNew">+ New instrument</button></div>
     </aside>
     <main class="stage" id="stage">
       <div class="empty-state" id="welcome">
         <h2>No instruments yet</h2>
-        <p>Import a .CKI from your Cirklon's card, paste a MIDI chart into a new
-        instrument, or start from scratch.</p>
+        <p>Import a .CKI from your Cirklon's card, or start a new instrument and
+        paste its MIDI chart in.</p>
         <button id="btnImport2" class="primary">Import a .CKI…</button>
+        <button id="btnNew2">New instrument</button>
       </div>
       <div id="editor" style="display:none;flex-direction:column;flex:1;min-height:0">
         <div class="inst-head">
           <h1 id="instName"></h1>
           <span class="budget" id="nameBudget"></span>
           <span class="inst-sub" id="instSub"></span>
+          <span class="inst-actions">
+            <button id="btnDuplicate" class="quiet" title="Copy this instrument — for a second unit, or the same synth on another channel">Duplicate</button>
+            <button id="btnDelete" class="quiet danger" title="Remove this instrument from the library">Delete</button>
+          </span>
         </div>
-        <div class="tabs" id="tabs"></div>
+        <div class="tabs" id="tabs" role="tablist"></div>
         <div class="panel" id="panel"></div>
       </div>
     </main>
   </div>
 </div>
 <div id="modals"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
 </html>
